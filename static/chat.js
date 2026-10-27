@@ -1,8 +1,9 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const el = (tag, cls, value) => { const n=document.createElement(tag); if(cls)n.className=cls; if(value!==undefined)n.textContent=value;return n; };
+const randomId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b=>b.toString(16).padStart(2,'0')).join('');
 const params = new URLSearchParams(location.search);
-const sessionId = /^[a-zA-Z0-9_-]{8,64}$/.test(params.get('session') || '') ? params.get('session') : crypto.randomUUID();
+const sessionId = /^[a-zA-Z0-9_-]{8,64}$/.test(params.get('session') || '') ? params.get('session') : randomId();
 if (params.get('session') !== sessionId) history.replaceState(null,'',`/chat?session=${encodeURIComponent(sessionId)}`);
 const state = {messages:[],busy:false,controller:null,playing:true,models:[]};
 $('sessionLabel').textContent = `SESSION ${sessionId.slice(0,8)}`;
@@ -60,7 +61,7 @@ async function send(compare=false) {
   if(compare&&!$('compareTemperature').reportValidity())return;
   const temperature=Number($('temperature').value), temperatureB=Number($('compareTemperature').value);
   const prior=[...state.messages];
-  const comparisonId=compare?crypto.randomUUID():null;
+  const comparisonId=compare?randomId():null;
   error('');message('user',prompt);$('prompt').value='';busy(true);status('モデルを準備しています',true);
   try {
     if(compare) {

@@ -16,7 +16,7 @@ VPN接続後、`http://150.89.227.185:8090/` を開きます。同じセッシ�
 
 ## DGX Sparkでの導入
 
-既存配置先は `/home/sakurai/llm-observatory`、ユーザーサービスは `llm-observatory.service` です。既存のPyTorch/CUDAを維持し、仮想環境に不足する依存関係を追加します。
+既存配置先は `/home/sakurai/llm-observatory`、ユーザーサービスは `llm-observatory.service` です。既存のPyTorch/CUDAを維持し、仮想環境に不足する依存関係を追加します。`download_models.py` はgpt-ossの重みとMXFP4用Tritonカーネルを取得し、オフライン推論に備えます。
 
 ```bash
 cd /home/sakurai/llm-observatory
