@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#192c47">
+  <title>LLM Observatory — ことばが生まれる、その瞬間。</title>
+  <link rel="stylesheet" href="/static/vendor/bootstrap.min.css">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><div><h1>LLM <strong>Observatory</strong></h1><span class="brand-caption">ことばが生まれる、その瞬間。</span></div></div>
+  <div class="top-actions"><span class="live-badge"><span class="status-dot"></span> LOCAL INFERENCE</span><button class="btn btn-sm btn-outline-secondary" id="helpButton" aria-expanded="false">この画面の見方</button></div>
+</header>
+<div id="help" class="help-strip" hidden>入力 → 各層の計算 → 候補の確率 → 1トークンの選択。この流れを実際のモデル出力で観察します。アテンションは直前の文脈トークンから過去への重みで、生成語の「意味の説明」ではありません。生成後は下のスライダーで各ステップを確認できます。</div>
+<main class="app-layout">
+  <section class="chat-panel panel" aria-labelledby="chatTitle">
+    <div class="chat-heading"><div><span class="eyebrow">CONVERSATION</span><h2 id="chatTitle">モデルと話す</h2></div><button id="resetButton" class="icon-button" title="新しい会話" aria-label="新しい会話">＋</button></div>
+    <div class="model-control"><label for="modelSelect" class="control-label">モデル</label><select class="form-select" id="modelSelect"><option>接続しています…</option></select><div id="modelDescription" class="small-note">サーバーを確認しています</div></div>
+    <div id="chatMessages" class="chat-messages" aria-live="polite" aria-relevant="additions text">
+      <div id="welcome" class="welcome"><span class="welcome-glyph" aria-hidden="true">Aa<span>→</span></span><h3>ひとことから、<br>モデルの中をのぞこう。</h3><p>メッセージを送ると、ことばが<br>一つずつ選ばれる様子が見えます。</p><div class="suggestions"><button class="example-button" data-prompt="大阪の名物を3つ教えて">大阪の名物を3つ教えて <span>↗</span></button><button class="example-button" data-prompt="空が青く見える理由を一文で教えて">空はどうして青い？ <span>↗</span></button><button class="example-button" data-prompt="春をテーマに俳句を1つ作って">春の俳句をつくって <span>↗</span></button></div></div>
+    </div>
+    <div id="errorBox" class="alert alert-danger mx-3 mb-2" role="alert" hidden></div>
+    <form id="chatForm" class="composer"><label class="visually-hidden" for="prompt">メッセージ</label><textarea class="form-control" id="prompt" placeholder="メッセージを入力…" rows="2" maxlength="4000" required></textarea><div class="composer-bottom"><span>Enterで送信 · Shift + Enterで改行</span><button class="btn btn-primary" type="submit" id="sendButton">送信 <span aria-hidden="true">↑</span></button><button class="btn btn-outline-danger" type="button" id="stopButton" hidden>■ 停止</button></div></form>
+    <div class="chat-footer">生成内容には誤りが含まれることがあります。</div>
+  </section>
+
+  <section class="dashboard" aria-label="生成プロセスの可視化">
+    <div class="dashboard-heading"><div><span class="eyebrow">INSIDE THE MODEL</span><h2>生成のしくみを、リアルタイムに。</h2></div><span id="runStatus" class="run-status" role="status">入力待ち</span></div>
+    <div class="top-grid">
+      <section class="panel token-panel"><div class="panel-heading"><h3><span class="step-number">1</span>入力のトークン化</h3><span class="meta" id="inputCount">— tokens</span></div><div class="token-list" id="inputTokens"><span class="empty-inline">入力がモデルの処理単位に分かれます</span></div><div class="panel-foot">入力文の実トークン / チャット書式を除く</div></section>
+      <section class="panel current-panel"><div class="panel-heading"><h3><span class="step-number">2</span>選ばれたトークン</h3><span class="meta" id="stepCount">STEP —</span></div><div class="current-token" id="currentToken">—</div><div class="current-details"><span id="tokenId">TOKEN ID —</span><span id="selectedProb">確率 —</span></div></section>
+    </div>
+
+    <div class="middle-grid">
+      <section class="panel hidden-panel"><div class="panel-heading"><h3><span class="step-number">3</span>Transformerの内部状態</h3></div><div class="subline"><span id="layerCount">各層の活性を観察</span><span>弱 <i class="heat-legend"></i> 強</span></div><div class="hidden-chart" id="hiddenChart"><div class="chart-empty"><span class="empty-bars" aria-hidden="true">▁ ▃ ▅ ▂ ▆ ▃ ▁</span>生成すると、各層の<br>実際の内部状態を表示します</div></div><div class="panel-foot">代表層＋選択層 / 48区間のRMS / 層ごとに正規化</div></section>
+      <section class="panel attention-panel"><div class="panel-heading"><h3><span class="step-number">4</span>アテンション</h3><label class="visually-hidden" for="layerSelect">アテンションのレイヤー</label><select id="layerSelect" class="form-select form-select-sm layer-select" disabled><option>Layer —</option></select></div><div class="subline"><span>全ヘッドの平均 · 直近48トークン</span><span>0 <i class="heat-legend"></i> <span id="attentionScale">1</span></span></div><div class="attention-wrap" id="attentionChart"><div class="chart-empty"><span class="empty-grid" aria-hidden="true">▦</span>どの文脈に注意を向けたか<br>トークンごとの重みがここに並びます</div></div><div class="panel-foot">行：予測ステップ / 列：文脈トークン。表示範囲外の重みも存在します。</div></section>
+    </div>
+
+    <div class="bottom-grid">
+      <section class="panel probability-panel"><div class="panel-heading"><h3><span class="step-number">5</span>次トークンの候補</h3><span class="meta">TOP 8</span></div><div class="subline">生成設定を適用した、選択直前の確率</div><div id="probabilityChart" class="probability-chart"><div class="chart-empty">モデルが考えた候補と確率を表示します</div></div></section>
+      <section class="panel logits-panel"><div class="panel-heading"><h3><span class="step-number">6</span>スコアから確率へ</h3></div><div class="softmax-diagram"><span>Logits</span><span class="process-arrow">→</span><span class="softmax-node">温度・softmax<br><small>Top-K / Top-P</small></span><span class="process-arrow">→</span><span>確率</span></div><div id="logitsTable" class="logits-table"><div class="chart-empty">生のスコアが<br>選択確率に変わります</div></div><div class="panel-foot">T=0 は最大スコアを選ぶ greedy 生成</div></section>
+      <div class="side-stack">
+        <section class="panel settings-panel"><div class="panel-heading"><h3><span class="step-number">7</span>生成設定</h3></div><fieldset id="settingsFields"><div class="range-label"><label for="temperature">Temperature</label><output id="temperatureValue">0.7</output></div><input id="temperature" class="form-range" type="range" min="0" max="2" step="0.1" value="0.7"><div class="range-endpoints"><span>安定</span><span>多様</span></div><div class="settings-row"><label for="topK">Top-K</label><input id="topK" class="form-control form-control-sm" type="number" min="0" max="100" value="20"><label for="topP">Top-P</label><input id="topP" class="form-control form-control-sm" type="number" min="0.05" max="1" step="0.05" value="0.95"></div><details><summary>詳細設定</summary><div class="detail-field"><label for="maxTokens">最大生成数</label><input id="maxTokens" class="form-control form-control-sm" type="number" min="1" max="256" value="128"></div><div class="detail-field"><label for="delay">表示間隔 (ms)</label><input id="delay" class="form-control form-control-sm" type="number" min="0" max="1000" step="20" value="80"></div><div class="detail-field"><label for="seed">乱数シード</label><input id="seed" class="form-control form-control-sm" type="number" min="0" max="2147483647" value="42"></div></details></fieldset></section>
+        <section class="panel system-panel"><div class="panel-heading"><h3><span class="step-number">8</span>システム</h3><span class="status-dot"></span></div><dl><div><dt>GPU</dt><dd id="gpuName">接続中…</dd></div><div><dt>精度</dt><dd id="precision">—</dd></div><div><dt>速度</dt><dd><strong id="speed">—</strong> <small>tok/s</small></dd></div><div><dt>文脈</dt><dd id="contextCount">—</dd></div></dl><div class="local-caption">● サーバー内で推論 / 外部API不使用</div></section>
+      </div>
+    </div>
+    <section class="timeline panel" aria-label="生成ステップを振り返る"><button class="icon-button" id="prevStep" aria-label="前のステップ" disabled>‹</button><label for="timeline" id="timelineLabel">ステップを振り返る</label><input type="range" class="form-range" id="timeline" min="1" max="1" value="1" disabled><span id="timelineCount" class="meta">0 / 0</span><button class="icon-button" id="nextStep" aria-label="次のステップ" disabled>›</button><button class="btn btn-sm btn-outline-primary" id="liveButton" disabled>最新へ</button></section>
+    <footer class="dashboard-footer"><span><i class="status-dot"></i> すべてモデルから取得した実データ</span><span>TRANSFORMERS × BOOTSTRAP</span></footer>
+  </section>
+</main>
+<script src="/static/app.js" defer></script>
+</body></html>

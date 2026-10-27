@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+.native/
+.env
+verification.json
+browser-verification.json
+*.zip
+*.log
+requirements.lock.txt
