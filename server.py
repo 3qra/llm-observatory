@@ -214,8 +214,15 @@ def infer(data, events, stop, control, session, run_id):
                 dropped += 1
         ids = ids.to(model.device)
         context_ids = ids[0].tolist()
-        prompt_count = len(context_ids)
         user_start, user_ids = locate_user_tokens(tokenizer, messages, template_args, context_ids)
+        if data.model.startswith("openai/"):
+            # The gpt-oss template ends at "<|start|>assistant". Without a
+            # channel prefill the model may emit analysis and final headers;
+            # skip_special_tokens then turns those headers into visible prose.
+            final_prefix = tokenizer.encode("<|channel|>final<|message|>", add_special_tokens=False)
+            ids = torch.cat((ids, torch.tensor([final_prefix], device=model.device)), dim=-1)
+            context_ids.extend(final_prefix)
+        prompt_count = len(context_ids)
         config = model.config
         emit({"type": "start", "model": data.model,
               "tokens": [{"id": i, "text": token_label(tokenizer, i)} for i in user_ids],
@@ -233,6 +240,9 @@ def infer(data, events, stop, control, session, run_id):
         eos_ids = model.generation_config.eos_token_id
         if not isinstance(eos_ids, list):
             eos_ids = [eos_ids]
+        if data.model.startswith("openai/"):
+            eos_ids = list(set(eos_ids + [tokenizer.convert_tokens_to_ids(token)
+                            for token in ("<|end|>", "<|return|>", "<|call|>")]))
         reason = "length"
         with torch.inference_mode():
             for step in range(data.max_tokens):
@@ -262,6 +272,9 @@ def infer(data, events, stop, control, session, run_id):
                 logits = outputs.logits[0, -1].float()
                 probs = sampling_distribution(logits.clone(), data.temperature, data.top_k, data.top_p)
                 next_id = int(torch.multinomial(probs, 1, generator=rng).item())
+                if next_id in eos_ids:
+                    reason = "eos"
+                    break
                 best_probs, best_ids = torch.topk(probs, 8)
                 candidates = [{"id": int(i), "text": token_label(tokenizer, i),
                                "prob": float(p), "logit": float(logits[i])}
@@ -298,9 +311,6 @@ def infer(data, events, stop, control, session, run_id):
                     return
                 del outputs, states, grouped, scale, logits, probs
                 context_ids.append(next_id)
-                if next_id in eos_ids:
-                    reason = "eos"
-                    break
                 ids = torch.tensor([[next_id]], device=model.device)
                 if stop.wait(data.delay_ms / 1000):
                     return
