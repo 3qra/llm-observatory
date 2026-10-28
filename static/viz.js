@@ -295,4 +295,5 @@ async function controlAction(action) {
 }
 $('pauseButton').addEventListener('click',()=>controlAction(playing?'pause':'resume'));
 $('stepButton').addEventListener('click',()=>controlAction('step'));
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&!e.repeat&&currentRun()?.start.manual_mode&&!currentRun()?.done&&!e.target.closest('input,select,textarea,[contenteditable="true"]')){e.preventDefault();controlAction('step');}});
 setupSession();

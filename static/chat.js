@@ -16,7 +16,7 @@ function busy(value) {
   state.busy=value;
   $('sendButton').hidden=value;$('stopButton').hidden=!value;
   $('modelSelect').disabled=value;$('resetButton').disabled=value;$('settingsFields').disabled=value;
-  $('modeAuto').disabled=value;$('manualMode').disabled=value;$('compareButton').disabled=value||$('manualMode').checked;$('prompt').disabled=value;
+  $('modeAuto').disabled=value;$('manualMode').disabled=value;$('compareButton').disabled=value||$('manualMode').checked;$('prompt').readOnly=value;
   $('pauseButton').disabled=!value;$('stepButton').disabled=!value;$('backButton').disabled=!value||!$('manualMode').checked||state.generatedSteps===0;
   document.querySelectorAll('.example-button').forEach(b=>b.disabled=value);
 }
@@ -67,7 +67,7 @@ async function send(compare=false) {
   const comparisonId=compare?randomId():null;
   state.playing=!$('manualMode').checked||compare;state.generatedSteps=0;
   $('pauseButton').textContent=state.playing?'一時停止':'自動再開';
-  error('');message('user',prompt);$('prompt').value='';busy(true);status('モデルを準備しています',true);
+  error('');message('user',prompt);$('prompt').value='';busy(true);if($('manualMode').checked&&!compare)$('prompt').focus();status('モデルを準備しています',true);
   try {
     if(compare) {
       const a=message('assistant','',`A · ${$('modelSelect').selectedOptions[0].textContent} · T=${temperature.toFixed(1)}`);
@@ -106,7 +106,7 @@ async function init() {
 }
 function modelChange(){const m=state.models.find(m=>m.id===$('modelSelect').value);$('modelDescription').textContent=m?`${m.description} · ${m.layers} layers`:'';}
 $('chatForm').addEventListener('submit',e=>{e.preventDefault();send(false);});
-$('prompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('chatForm').requestSubmit();}});
+$('prompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();e.stopPropagation();if(state.busy&&$('manualMode').checked)control('step');else if(!state.busy)$('chatForm').requestSubmit();}});
 $('compareButton').addEventListener('click',()=>send(true));
 $('stopButton').addEventListener('click',()=>state.controller?.abort());
 $('pauseButton').addEventListener('click',()=>control(state.playing?'pause':'resume'));
