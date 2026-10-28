@@ -37,24 +37,23 @@ function payload(prompt, temperature, runLabel, comparisonId, prior) {
 }
 async function streamRun(data, box) {
   state.controller=new AbortController();
-  const response=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal:state.controller.signal});
+  const response=await fetch('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal:state.controller.signal});
   if(!response.ok) { const detail=await response.json();throw new Error(typeof detail.detail==='string'?detail.detail:'生成を開始できませんでした。'); }
-  const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='',done=false,last='';
-  while(true) {
-    const part=await reader.read();buffer+=decoder.decode(part.value||new Uint8Array(),{stream:!part.done});
-    const lines=buffer.split('\n');buffer=lines.pop();
-    for(const line of lines) if(line.trim()) {
-      const event=JSON.parse(line);
+  let {cursor}=await response.json(),done=false,last='';
+  while(!done) {
+    const poll=await fetch(`/api/events/${encodeURIComponent(sessionId)}/poll?cursor=${cursor}`,{signal:state.controller.signal,cache:'no-store'});
+    if(!poll.ok)throw new Error('生成イベントを取得できませんでした。');
+    const batch=await poll.json();cursor=batch.cursor;
+    for(const event of batch.events) {
       if(event.type==='status')status(event.message,true);
       if(event.type==='start')status(data.manual_mode&&!state.playing?'次のトークン待ち':'生成しています',state.playing);
       if(event.type==='token') {last=event.text;state.generatedSteps=event.step;box.querySelector('.bubble').textContent=last;$('backButton').disabled=!data.manual_mode||state.generatedSteps===0;$('chatMessages').scrollTop=$('chatMessages').scrollHeight;if(!state.playing)status('次のトークン待ち');}
       if(event.type==='rewind') {last=event.text;state.generatedSteps=event.step;box.querySelector('.bubble').textContent=last;$('backButton').disabled=state.generatedSteps===0;status('1トークン戻しました');}
       if(event.type==='error')throw new Error(event.message);
+      if(event.type==='cancelled'){const err=new Error('生成を停止しました。');err.name='AbortError';throw err;}
       if(event.type==='done') {done=true;status('生成完了');box.append(el('div','message-note',`${event.tokens} tokens · ${event.seconds.toFixed(1)}秒`));}
     }
-    if(part.done)break;
   }
-  if(!done)throw new Error('生成中に接続が切れました。');
   return last;
 }
 async function send(compare=false) {
@@ -92,7 +91,7 @@ async function send(compare=false) {
 }
 async function control(action) {
   try {const r=await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:sessionId,action})});if(!r.ok)throw new Error((await r.json()).detail);
-    const result=await r.json();state.playing=result.playing;$('pauseButton').textContent=state.playing?'一時停止':'自動再開';status(action==='step'?'1トークン進めています':action==='back'?'1トークン戻しています':state.playing?'生成しています':'次のトークン待ち',state.playing);
+    const result=await r.json();if(action==='stop'){status('停止しています');return;}state.playing=result.playing;$('pauseButton').textContent=state.playing?'一時停止':'自動再開';status(action==='step'?'1トークン進めています':action==='back'?'1トークン戻しています':state.playing?'生成しています':'次のトークン待ち',state.playing);
   }catch(e){error(e.message);}
 }
 async function init() {
@@ -108,7 +107,7 @@ function modelChange(){const m=state.models.find(m=>m.id===$('modelSelect').valu
 $('chatForm').addEventListener('submit',e=>{e.preventDefault();send(false);});
 $('prompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();e.stopPropagation();if(state.busy&&$('manualMode').checked)control('step');else if(!state.busy)$('chatForm').requestSubmit();}});
 $('compareButton').addEventListener('click',()=>send(true));
-$('stopButton').addEventListener('click',()=>state.controller?.abort());
+$('stopButton').addEventListener('click',()=>control('stop'));
 $('pauseButton').addEventListener('click',()=>control(state.playing?'pause':'resume'));
 $('stepButton').addEventListener('click',()=>control('step'));
 $('backButton').addEventListener('click',()=>control('back'));
@@ -119,5 +118,6 @@ function modeChange(){const manual=$('manualMode').checked;$('modeHint').textCon
 $('modeAuto').addEventListener('change',modeChange);
 $('manualMode').addEventListener('change',modeChange);
 $('resetButton').addEventListener('click',()=>{state.messages=[];$('chatMessages').replaceChildren();error('');status('入力待ち');$('prompt').value='';$('prompt').focus();});
+window.addEventListener('pagehide',()=>{if(state.busy)navigator.sendBeacon('/api/control',new Blob([JSON.stringify({session_id:sessionId,action:'stop'})],{type:'application/json'}));});
 document.querySelectorAll('.example-button').forEach(b=>b.addEventListener('click',()=>{$('prompt').value=b.dataset.prompt;send(false);}));
 init();

@@ -152,9 +152,17 @@ function setupSession() {
     status('セッション未設定'); return;
   }
   $('sessionLabel').textContent = `SESSION ${sessionId.slice(0, 8)}`;
-  const feed = new EventSource(`/api/events/${encodeURIComponent(sessionId)}`);
-  feed.onmessage = e => { try { handleBroadcast(JSON.parse(e.data)); } catch (err) { error(`表示エラー: ${err.message}`); } };
-  feed.onerror = () => status('再接続しています…');
+  (async()=>{
+    let cursor=0;
+    while(true){
+      try {
+        const response=await fetch(`/api/events/${encodeURIComponent(sessionId)}/poll?cursor=${cursor}`,{cache:'no-store'});
+        if(!response.ok)throw new Error(`HTTP ${response.status}`);
+        const batch=await response.json();cursor=batch.cursor;
+        for(const event of batch.events)handleBroadcast(event);
+      } catch(err){status('再接続しています…');await new Promise(resolve=>setTimeout(resolve,1000));}
+    }
+  })();
   fetch('/api/system').then(r => r.json()).then(s => { $('gpuName').textContent = s.device; }).catch(() => {});
 }
 function currentRun() { return runs.get(lane); }
@@ -206,6 +214,7 @@ function handleBroadcast(event) {
     status(playing ? '生成しています' : '次のトークン待ち', playing);
     return;
   }
+  if (event.type === 'cancelled') { if(currentRun())currentRun().done={reason:'cancelled'};status('停止しました');$('pauseButton').disabled=true;$('stepButton').disabled=true;return; }
   if (event.type === 'status') { status(event.message, true); return; }
   const key = event.run_label || 'single';
   if (event.type === 'start') {

@@ -62,8 +62,9 @@ def publish(session, payload):
 
 
 class RunControl:
-    def __init__(self, session_id, playing=True):
+    def __init__(self, session_id, playing=True, stop_event=None):
         self.session_id = session_id
+        self.stop_event = stop_event
         self.condition = threading.Condition()
         self.playing = playing
         self.budget = 0
@@ -84,6 +85,12 @@ class RunControl:
                 self.rewinds += 1
             self.condition.notify_all()
             return {"type": "control", "playing": self.playing, "step_budget": self.budget, "rewind_budget": self.rewinds}
+
+    def cancel(self):
+        if self.stop_event is not None:
+            self.stop_event.set()
+        with self.condition:
+            self.condition.notify_all()
 
     def wait(self, stop):
         with self.condition:
@@ -188,9 +195,13 @@ def sampling_distribution(logits, temperature, top_k, top_p):
 
 def infer(data, events, stop, control, session, run_id):
     def emit(payload):
+        if stop.is_set():
+            return False
         payload.update(run_id=run_id, run_label=data.run_label, comparison_id=data.comparison_id)
         publish(session, payload)
-        while not stop.is_set():
+        if events is None:
+            return True
+        while events is not None and not stop.is_set():
             try:
                 events.put(payload, timeout=0.2)
                 return True
@@ -350,7 +361,7 @@ def infer(data, events, stop, control, session, run_id):
             active_run = None
         # Never release the GPU to another request until this worker has really stopped.
         gpu_lock.release()
-        while not stop.is_set():
+        while events is not None and not stop.is_set():
             try:
                 events.put(None, timeout=0.2)
                 break
@@ -426,7 +437,7 @@ async def session_events(session_id: str, request: Request):
 
 class ControlRequest(BaseModel):
     session_id: str
-    action: str = Field(pattern="^(pause|resume|step|back)$")
+    action: str = Field(pattern="^(pause|resume|step|back|stop)$")
 
 
 @app.post("/api/control")
@@ -435,6 +446,11 @@ def control_run(data: ControlRequest):
     control = active_run
     if control is None or control.session_id != data.session_id:
         raise HTTPException(409, "このセッションに実行中の生成はありません。")
+    if data.action == "stop":
+        control.cancel()
+        event = {"type": "cancelled"}
+        publish(session, event)
+        return event
     event = control.change(data.action)
     publish(session, event)
     return event
@@ -447,6 +463,51 @@ def system():
             "cuda": torch.version.cuda, "torch": torch.__version__, "loaded_model": loaded["id"],
             "busy": gpu_lock.locked(), "allocated_gb": round(torch.cuda.memory_allocated()/1024**3, 2) if gpu else 0,
             "backend": "Transformers / eager attention", "local_inference": True}
+
+
+@app.get("/api/events/{session_id}/poll")
+async def poll_events(session_id: str, cursor: int = 0):
+    session = get_session(session_id)
+    deadline = time.monotonic() + 1.0
+    while True:
+        with session_lock:
+            cursor = max(cursor, session["offset"])
+            index = cursor - session["offset"]
+            batch = session["events"][index:index+32]
+            next_cursor = cursor + len(batch)
+        if batch or time.monotonic() >= deadline:
+            return {"cursor": next_cursor, "events": batch}
+        await asyncio.sleep(0.1)
+
+
+@app.post("/api/start")
+def start_generation(data: GenerateRequest, request: Request):
+    global active_run
+    origin = request.headers.get("origin")
+    if origin and origin.rstrip("/") != str(request.base_url).rstrip("/"):
+        raise HTTPException(403, "異なるサイトからの生成リクエストは受け付けません。")
+    if data.model not in {m["id"] for m in MODELS}:
+        raise HTTPException(400, "モデルが見つかりません。")
+    if not data.session_id:
+        raise HTTPException(400, "セッションIDが必要です。")
+    if data.messages[-1].role != "user":
+        raise HTTPException(400, "最後のメッセージはユーザー入力にしてください。")
+    if sum(len(m.content) for m in data.messages) > 16000:
+        raise HTTPException(400, "会話が長すぎます。新しい会話を始めてください。")
+    session = get_session(data.session_id)
+    if not gpu_lock.acquire(blocking=False):
+        raise HTTPException(409, "別の生成を処理しています。進行中の画面で停止するか、完了を待ってください。")
+    with session_lock:
+        cursor = session["offset"] + len(session["events"])
+    stop = threading.Event()
+    control = RunControl(data.session_id, playing=not data.manual_mode, stop_event=stop)
+    active_run = control
+    if data.manual_mode:
+        publish(session, {"type": "control", "playing": False, "step_budget": 0})
+    run_id = uuid.uuid4().hex
+    worker = threading.Thread(target=infer, args=(data, None, stop, control, session, run_id), daemon=True)
+    worker.start()
+    return {"run_id": run_id, "cursor": cursor}
 
 
 @app.post("/api/generate")
@@ -467,7 +528,7 @@ async def generate(data: GenerateRequest, request: Request):
         raise HTTPException(409, "別の生成を処理しています。少し待って再実行してください。")
     events = queue.Queue(maxsize=4)
     stop = threading.Event()
-    control = RunControl(data.session_id, playing=not data.manual_mode)
+    control = RunControl(data.session_id, playing=not data.manual_mode, stop_event=stop)
     active_run = control
     if data.manual_mode:
         publish(session, {"type": "control", "playing": False, "step_budget": 0})

@@ -33,12 +33,14 @@ systemctl --user restart llm-observatory
 ## APIと検証
 
 - `GET /api/models`: 導入済みモデル一覧。
+- `POST /api/start`: 2画面用の生成開始。すぐに応答し、推論はバックグラウンドで進みます。
+- `GET /api/events/{session_id}/poll?cursor=...`: 2画面用の短いイベント取得。再接続してもカーソルから続きを取得できます。
 - `POST /api/generate`: NDJSONの生成イベント。`session_id` と `run_label`（`single`/`A`/`B`）を指定すると画面同期に配信します。
-- `GET /api/events/{session_id}`: 画面同期用SSE。後から開いた画面にもセッション内の最近のイベントを再送します。
-- `POST /api/control`: 対象セッションの`pause`、`step`、`resume`。
+- `GET /api/events/{session_id}`: 従来の画面同期用SSE。
+- `POST /api/control`: 対象セッションの`pause`、`step`、`resume`、`back`、`stop`。
 - `GET /api/system`: GPUと推論状態。
 
-`python verify.py` はQwenの推論・確率・アテンション等の旧統合テストです。`python verify_duo.py` は2画面プロトコル、PCA、一時停止、A/B比較を、`python verify_manual.py` はgpt-ossの手動開始・1トークン進行・巻き戻し・自動再開を稼働中のサーバーで検査します。
+`python verify.py` はQwenの推論・確率・アテンション等の旧統合テストです。`python verify_duo.py` は2画面プロトコル、PCA、一時停止、A/B比較を、`python verify_manual.py` は従来のストリーミングAPIを、`python verify_poll.py` は画面で使う短い通信による手動開始・1トークン進行・巻き戻し・自動再開を稼働中のサーバーで検査します。
 
 ## 制限
 
