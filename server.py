@@ -62,10 +62,10 @@ def publish(session, payload):
 
 
 class RunControl:
-    def __init__(self, session_id):
+    def __init__(self, session_id, playing=True):
         self.session_id = session_id
         self.condition = threading.Condition()
-        self.playing = True
+        self.playing = playing
         self.budget = 0
 
     def change(self, action):
@@ -105,6 +105,7 @@ class GenerateRequest(BaseModel):
     max_tokens: int = Field(default=128, ge=1, le=256)
     seed: int = Field(default=42, ge=0, le=2147483647)
     delay_ms: int = Field(default=80, ge=0, le=1000)
+    manual_mode: bool = False
     session_id: str | None = None
     run_label: str = Field(default="single", pattern="^(single|A|B)$")
     comparison_id: str | None = Field(default=None, max_length=64)
@@ -225,6 +226,7 @@ def infer(data, events, stop, control, session, run_id):
         prompt_count = len(context_ids)
         config = model.config
         emit({"type": "start", "model": data.model,
+              "manual_mode": data.manual_mode,
               "tokens": [{"id": i, "text": token_label(tokenizer, i)} for i in user_ids],
               "user_start": user_start,
               "settings": {"temperature": data.temperature, "top_k": data.top_k, "top_p": data.top_p, "seed": data.seed},
@@ -442,8 +444,10 @@ async def generate(data: GenerateRequest, request: Request):
         raise HTTPException(409, "別の生成を処理しています。少し待って再実行してください。")
     events = queue.Queue(maxsize=4)
     stop = threading.Event()
-    control = RunControl(data.session_id)
+    control = RunControl(data.session_id, playing=not data.manual_mode)
     active_run = control
+    if data.manual_mode:
+        publish(session, {"type": "control", "playing": False, "step_budget": 0})
     worker = threading.Thread(target=infer, args=(data, events, stop, control, session, uuid.uuid4().hex), daemon=True)
     worker.start()
 

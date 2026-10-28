@@ -61,7 +61,7 @@ function startEvent(data) {
   $('layerSelect').replaceChildren(...Array.from({length:data.layers},(_,i)=>{const o=el('option','',`Layer ${i+1}`);o.value=i;return o;}));
   $('layerSelect').value=data.layers-1; $('layerSelect').disabled=false;
   if(data.dropped_messages) error(`文脈長に収まるよう、古い${data.dropped_messages}件のメッセージを今回の推論から除きました。`);
-  status('生成しています',true);
+  status(data.manual_mode&&!playing?'次のトークン待ち':'生成しています',playing);
 }
 function renderHidden(s) {
   const fragment=document.createDocumentFragment();
@@ -202,8 +202,8 @@ function renderCompare() {
 function handleBroadcast(event) {
   if (event.type === 'control') {
     playing = event.playing;
-    $('pauseButton').textContent = playing ? '一時停止' : '再開';
-    status(playing ? '生成しています' : '一時停止中', playing);
+    $('pauseButton').textContent = playing ? '一時停止' : '自動再開';
+    status(playing ? '生成しています' : '次のトークン待ち', playing);
     return;
   }
   if (event.type === 'status') { status(event.message, true); return; }
@@ -213,6 +213,7 @@ function handleBroadcast(event) {
     if (key === 'A') runs.delete('B');
     runs.set(key, {start:event, steps:[], pca:null, done:null});
     lane = key; selectedPca = 0; renderLane(); updateLaneButtons();
+    $('pauseButton').textContent = playing ? '一時停止' : '自動再開';
     $('pauseButton').disabled = false; $('stepButton').disabled = false;
     return;
   }
@@ -227,6 +228,7 @@ function handleBroadcast(event) {
       else { $('timeline').max = state.steps.length; $('timelineCount').textContent = `${state.selected+1} / ${state.steps.length}`; $('nextStep').disabled = false; }
     }
     updateLaneButtons();
+    if (!playing && lane === key) status('次のトークン待ち');
   }
   if (event.type === 'done') { run.done = event; if (lane === key) status('生成完了'); $('pauseButton').disabled = true; $('stepButton').disabled = true; }
   if (event.type === 'error') { error(event.message); status('生成エラー'); $('pauseButton').disabled = true; $('stepButton').disabled = true; }
@@ -239,14 +241,34 @@ function renderPca() {
   const maxY = Math.max(1e-5, ...points.map(p=>Math.abs(p.y)));
   const make = (tag, attrs) => { const n=document.createElementNS('http://www.w3.org/2000/svg',tag); for(const [k,v] of Object.entries(attrs)) n.setAttribute(k,String(v));return n; };
   svg.append(make('line',{x1:300,y1:8,x2:300,y2:172,stroke:'#dce3ec'}),make('line',{x1:12,y1:90,x2:588,y2:90,stroke:'#dce3ec'}));
+  const occupied=[];
+  const labels=[];
   points.forEach((p,i) => {
     const x=300+p.x/maxX*270, y=90-p.y/maxY*70;
+    const caption=`${i+1} ${visible(p.text).slice(0,9)}`;
+    const width=Math.min(110,Math.max(24,[...caption].reduce((sum,ch)=>sum+(/[\u3000-\uffff]/.test(ch)?10:6.5),9)));
+    const candidates=[[9,-19],[9,8],[-width-9,-19],[-width-9,8],[9,-34],[-width-9,-34],[9,23],[-width-9,23]];
+    let best=null;
+    for(const [dx,dy] of candidates){
+      const lx=Math.max(3,Math.min(597-width,x+dx)), ly=Math.max(3,Math.min(163,y+dy));
+      const box={x:lx,y:ly,w:width,h:15};
+      const overlap=occupied.reduce((sum,b)=>sum+Math.max(0,Math.min(box.x+box.w,b.x+b.w)-Math.max(box.x,b.x))*Math.max(0,Math.min(box.y+box.h,b.y+b.h)-Math.max(box.y,b.y)),0);
+      if(!best||overlap<best.overlap)best={...box,overlap};
+      if(overlap===0)break;
+    }
+    occupied.push(best);
+    const group=make('g',{'class':`pca-label${i===selectedPca?' selected':''}`,role:'button',tabindex:0,'aria-label':`トークン ${i+1} ${visible(p.text)} を選択`});
+    group.append(make('line',{x1:x,y1:y,x2:best.x+best.w/2,y2:best.y+7.5,'class':'pca-leader'}),make('rect',{x:best.x,y:best.y,width:best.w,height:15,rx:3}),make('text',{x:best.x+4,y:best.y+11}));
+    group.lastChild.textContent=caption;
+    group.addEventListener('click',()=>pickPca(i));
+    group.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pickPca(i);}});
+    labels.push(group);
     const dot=make('circle',{cx:x,cy:y,r:i===selectedPca?8:5,fill:i===selectedPca?'#ed8f47':'#335ff0',tabindex:0,role:'button','aria-label':`トークン ${i+1} ${visible(p.text)} のPCA位置`});
     dot.addEventListener('click',()=>pickPca(i));
     dot.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pickPca(i);}});
     const title=make('title',{});title.textContent=`${i+1}: ${p.text} / ID ${p.id}`;dot.append(title);svg.append(dot);
-    if (i===selectedPca) { const label=make('text',{x:Math.min(550,x+10),y:Math.max(18,y-10),fill:'#a94e18','font-size':12});label.textContent=visible(p.text).slice(0,16);svg.append(label); }
   });
+  svg.append(...labels);
   const p=points[Math.min(selectedPca,points.length-1)];
   $('pcaDetails').textContent=`${p.index+1} / ${points.length} · ${visible(p.text)} · ID ${p.id}\nPC1 ${p.x.toFixed(3)} / PC2 ${p.y.toFixed(3)}`;
   $('pcaSelected').textContent=`選択 ${p.index+1} / ${points.length}`;

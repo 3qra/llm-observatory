@@ -57,3 +57,5 @@
 .fit-viz.detail-viz .bottom-grid{grid-template-columns:minmax(0,1.5fr) minmax(210px,.8fr)}
 .fit-viz.detail-viz .side-stack{grid-column:auto;display:flex}
 @media(max-width:700px){.detail-viz .bottom-grid{grid-template-columns:1fr}.detail-viz .side-stack{grid-column:auto}}
+.manual-switch{display:inline-flex;align-items:center;gap:6px;margin-right:5px;font-size:11px;font-weight:700;white-space:nowrap;color:var(--ink);cursor:pointer}.manual-switch .form-check-input{margin:0;cursor:pointer}.manual-switch .form-check-input:checked{background-color:var(--blue);border-color:var(--blue)}
+.pca-label{cursor:pointer}.pca-label rect{fill:#fff;fill-opacity:.91;stroke:#cbd6e6}.pca-label text{fill:#304762;font:10px 'Yu Gothic UI',sans-serif}.pca-label .pca-leader{stroke:#8da2c2;stroke-width:.7}.pca-label.selected rect{fill:#fff2e6;stroke:#ed8f47}.pca-label.selected text{fill:#8c471d;font-weight:700}

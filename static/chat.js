@@ -16,7 +16,7 @@ function busy(value) {
   state.busy=value;
   $('sendButton').hidden=value;$('stopButton').hidden=!value;
   $('modelSelect').disabled=value;$('resetButton').disabled=value;$('settingsFields').disabled=value;
-  $('compareButton').disabled=value;$('prompt').disabled=value;
+  $('manualMode').disabled=value;$('compareButton').disabled=value||$('manualMode').checked;$('prompt').disabled=value;
   $('pauseButton').disabled=!value;$('stepButton').disabled=!value;
   document.querySelectorAll('.example-button').forEach(b=>b.disabled=value);
 }
@@ -32,7 +32,8 @@ function payload(prompt, temperature, runLabel, comparisonId, prior) {
   return {session_id:sessionId,run_label:runLabel,comparison_id:comparisonId,
     model:$('modelSelect').value,messages:[...prior.slice(-22),{role:'user',content:prompt}],
     temperature,top_k:Number($('topK').value),top_p:Number($('topP').value),
-    max_tokens:Number($('maxTokens').value),delay_ms:Number($('delay').value),seed:Number($('seed').value)};
+    max_tokens:Number($('maxTokens').value),delay_ms:Number($('delay').value),seed:Number($('seed').value),
+    manual_mode:runLabel==='single'&&$('manualMode').checked};
 }
 async function streamRun(data, box) {
   state.controller=new AbortController();
@@ -45,8 +46,8 @@ async function streamRun(data, box) {
     for(const line of lines) if(line.trim()) {
       const event=JSON.parse(line);
       if(event.type==='status')status(event.message,true);
-      if(event.type==='start')status('生成しています',true);
-      if(event.type==='token') {last=event.text;box.querySelector('.bubble').textContent=last;$('chatMessages').scrollTop=$('chatMessages').scrollHeight;}
+      if(event.type==='start')status(data.manual_mode&&!state.playing?'次のトークン待ち':'生成しています',state.playing);
+      if(event.type==='token') {last=event.text;box.querySelector('.bubble').textContent=last;$('chatMessages').scrollTop=$('chatMessages').scrollHeight;if(!state.playing)status('次のトークン待ち');}
       if(event.type==='error')throw new Error(event.message);
       if(event.type==='done') {done=true;status('生成完了');box.append(el('div','message-note',`${event.tokens} tokens · ${event.seconds.toFixed(1)}秒`));}
     }
@@ -63,6 +64,8 @@ async function send(compare=false) {
   const temperature=Number($('temperature').value), temperatureB=Number($('compareTemperature').value);
   const prior=[...state.messages];
   const comparisonId=compare?randomId():null;
+  state.playing=!$('manualMode').checked||compare;
+  $('pauseButton').textContent=state.playing?'一時停止':'自動再開';
   error('');message('user',prompt);$('prompt').value='';busy(true);status('モデルを準備しています',true);
   try {
     if(compare) {
@@ -84,11 +87,11 @@ async function send(compare=false) {
     error(e.name==='AbortError'?'生成を停止しました。':e.message);
     status(e.name==='AbortError'?'停止しました':'生成エラー');
     document.querySelector('.message.assistant:last-of-type')?.classList.remove('streaming');
-  } finally {state.controller=null;busy(false);$('prompt').focus();}
+  } finally {state.controller=null;busy(false);state.playing=true;$('pauseButton').textContent='一時停止';$('prompt').focus();}
 }
 async function control(action) {
   try {const r=await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:sessionId,action})});if(!r.ok)throw new Error((await r.json()).detail);
-    const result=await r.json();state.playing=result.playing;$('pauseButton').textContent=state.playing?'一時停止':'再開';status(state.playing?'生成しています':'一時停止中',state.playing);
+    const result=await r.json();state.playing=result.playing;$('pauseButton').textContent=state.playing?'一時停止':'自動再開';status(action==='step'?'1トークン進めています':state.playing?'生成しています':'次のトークン待ち',state.playing);
   }catch(e){error(e.message);}
 }
 async function init() {
@@ -109,6 +112,7 @@ $('pauseButton').addEventListener('click',()=>control(state.playing?'pause':'res
 $('stepButton').addEventListener('click',()=>control('step'));
 $('temperature').addEventListener('input',()=>$('temperatureValue').textContent=Number($('temperature').value).toFixed(1));
 $('modelSelect').addEventListener('change',modelChange);
+$('manualMode').addEventListener('change',() => {$('compareButton').disabled=$('manualMode').checked;$('compareButton').title=$('manualMode').checked?'A/B比較は手動モードを解除すると使えます。':'';});
 $('resetButton').addEventListener('click',()=>{state.messages=[];$('chatMessages').replaceChildren(el('div','chart-empty','新しい会話を始めましょう。'));error('');status('入力待ち');$('prompt').value='';$('prompt').focus();});
 document.querySelectorAll('.example-button').forEach(b=>b.addEventListener('click',()=>{$('prompt').value=b.dataset.prompt;send(false);}));
 init();
