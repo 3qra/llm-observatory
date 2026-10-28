@@ -14,7 +14,7 @@ VPN接続後、`http://150.89.227.185:8090/` を開きます。同じセッシ�
 
 ## モデル
 
-選択肢は `Qwen/Qwen3-0.6B`、`Qwen/Qwen3-8B`、`openai/gpt-oss-20b` です。モデルファイルがローカルキャッシュに揃っていないものは選択できません。推論は `local_files_only=True`、サービスは `HF_HUB_OFFLINE=1` で動作し、外部AI APIには送信しません。GPUには同時に1モデル・1生成だけをロードします。gpt-oss 20BはOpenAIのオープンウェイトモデルで、Transformersのeager attentionから可視化データを取得します。導入と実機確認はDGX Spark上で行ってください。
+選択肢は `Qwen/Qwen3-0.6B`、`Qwen/Qwen3-8B`、`openai/gpt-oss-20b`、`openai/gpt-oss-120b` です。モデルファイルがローカルキャッシュに揃っていないものは選択できません。推論は `local_files_only=True`、サービスは `HF_HUB_OFFLINE=1` で動作し、外部AI APIには送信しません。GPUには同時に1モデル・1生成だけをロードします。gpt-oss 20B/120BはOpenAIのオープンウェイトモデルで、Transformersのeager attentionから可視化データを取得します。gpt-oss 120Bは36層・MXFP4で重みが約65GBあり、DGX Sparkの128GB統合メモリに1モデルだけ載せて使います。MXFP4のまま載せるため、モデルはCPUを経由せずGPUへ直接読み込みます。導入と実機確認はDGX Spark上で行ってください。
 
 ## DGX Sparkでの導入
 
@@ -24,8 +24,10 @@ VPN接続後、`http://150.89.227.185:8090/` を開きます。同じセッシ�
 cd /home/sakurai/llm-observatory
 .venv/bin/python -m pip install -r requirements.txt
 HF_HUB_OFFLINE=0 .venv/bin/python download_models.py openai/gpt-oss-20b
+HF_HUB_OFFLINE=0 .venv/bin/python download_models.py openai/gpt-oss-120b  # 約65GB、必要な場合のみ
 systemctl --user restart llm-observatory
 .venv/bin/python verify_duo.py
+.venv/bin/python verify_duo.py --model openai/gpt-oss-120b
 ```
 
 新規環境では適合するCUDA版PyTorchを先に入れ、`python -m venv .venv`、`pip install -r requirements.txt`、`python download_models.py` の順に実施します。systemdのユーザーサービスのパスと待受IPは実環境に合わせます。モデルは数十GBあるため十分な空き容量が必要です。
@@ -40,10 +42,10 @@ systemctl --user restart llm-observatory
 - `POST /api/control`: 対象セッションの`pause`、`step`、`resume`、`back`、`stop`。
 - `GET /api/system`: GPUと推論状態。
 
-`python verify.py` はQwenの推論・確率・アテンション等の旧統合テストです。`python verify_duo.py` は2画面プロトコル、PCA、一時停止、A/B比較を、`python verify_manual.py` は従来のストリーミングAPIを、`python verify_poll.py` は画面で使う短い通信による手動開始・1トークン進行・巻き戻し・自動再開を稼働中のサーバーで検査します。
+`python verify.py` はQwenの推論・確率・アテンション等の旧統合テストです。`python verify_duo.py` は2画面プロトコル、PCA、一時停止、A/B比較を、`python verify_manual.py` は従来のストリーミングAPIを、`python verify_poll.py [モデルID]` は画面で使う短い通信による手動開始・1トークン進行・巻き戻し・自動再開を稼働中のサーバーで検査します。
 
 ## 制限
 
-展示用のVPN内アプリで、ユーザー認証はありません。セッションIDはランダムに生成します。入力文脈は512トークン、生成は初期値384・上限768トークンです。全層のattention・hidden stateを取得するため、通常のチャット推論より計算量・メモリ使用量が大きくなります。gpt-oss 20Bの初回ロードは時間がかかる可能性があります。
+展示用のVPN内アプリで、ユーザー認証はありません。セッションIDはランダムに生成します。入力文脈は512トークン、生成は初期値384・上限768トークンです。全層のattention・hidden stateを取得するため、通常のチャット推論より計算量・メモリ使用量が大きくなります。gpt-oss 20Bの初回ロードは時間がかかる可能性があり、120Bは数分かかります。120Bの使用中は他のGPU処理に使えるメモリが大きく減ります。
 
 参考: [OpenAI gpt-oss](https://openai.com/open-models/)、[Hugging Face TransformersのGptOss](https://huggingface.co/docs/transformers/model_doc/gpt_oss)、[Bootstrap](https://getbootstrap.com/docs/5.3/getting-started/introduction/)

@@ -3,7 +3,8 @@ import argparse
 from huggingface_hub import snapshot_download
 
 parser = argparse.ArgumentParser()
-parser.add_argument("models", nargs="*", default=["Qwen/Qwen3-0.6B", "Qwen/Qwen3-8B", "openai/gpt-oss-20b"])
+parser.add_argument("models", nargs="*", default=["Qwen/Qwen3-0.6B", "Qwen/Qwen3-8B", "openai/gpt-oss-20b"],
+                    help="例: openai/gpt-oss-120b（約65GB。既定では取得しません）")
 args = parser.parse_args()
 for name in args.models:
     print(f"Downloading {name}", flush=True)
@@ -12,7 +13,7 @@ for name in args.models:
                         "model.safetensors", "model.safetensors.index.json", "tokenizer*",
                         "special_tokens_map.json", "chat_template.jinja", "*.txt", "LICENSE", "README.md"],
         ignore_patterns=["original/*", "metal/*"])
-    if name == "openai/gpt-oss-20b":
+    if name.startswith("openai/gpt-oss-"):
         # MXFP4 layers request this kernel at load time. Cache it now so the
         # service can keep HF_HUB_OFFLINE=1 during inference.
         from kernels import get_kernel

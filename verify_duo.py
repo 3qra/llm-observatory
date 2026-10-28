@@ -9,10 +9,12 @@ import httpx
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--url", default="http://150.89.227.185:8090")
-parser.add_argument("--gpt-oss", action="store_true")
+parser.add_argument("--gpt-oss", action="store_true", help="openai/gpt-oss-20b で検証")
+parser.add_argument("--model", help="検証するモデルID（例: openai/gpt-oss-120b）。--gpt-oss より優先")
 args = parser.parse_args()
 client = httpx.Client(base_url=args.url, timeout=300)
-model = "openai/gpt-oss-20b" if args.gpt_oss else "Qwen/Qwen3-0.6B"
+model = args.model or ("openai/gpt-oss-20b" if args.gpt_oss else "Qwen/Qwen3-0.6B")
+is_gpt_oss = model.startswith("openai/gpt-oss-")
 available = {item["id"]: item["available"] for item in client.get("/api/models").json()["models"]}
 assert available.get(model), f"Model not installed: {model}"
 session = uuid.uuid4().hex
@@ -70,7 +72,7 @@ assert a[0]["run_id"] != b[0]["run_id"]
 assert all(e["comparison_id"] == comparison for e in a+b)
 print("same-question temperature A/B: OK", flush=True)
 
-if not args.gpt_oss:
+if not is_gpt_oss:
     pause_events = []
     first_token = threading.Event()
     finished = threading.Event()

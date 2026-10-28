@@ -22,7 +22,8 @@ ROOT = Path(__file__).parent
 MODELS = [
     {"id": "Qwen/Qwen3-0.6B", "name": "Qwen3 · 0.6B", "description": "軽量・すばやく観察", "layers": 28},
     {"id": "Qwen/Qwen3-8B", "name": "Qwen3 · 8B", "description": "高品質・36層を観察", "layers": 36},
-    {"id": "openai/gpt-oss-20b", "name": "OpenAI gpt-oss · 20B", "description": "MoE・36層 / 初回読み込みに時間がかかります", "layers": 36},
+    {"id": "openai/gpt-oss-20b", "name": "OpenAI gpt-oss · 20B", "description": "MoE・24層 / 初回読み込みに時間がかかります", "layers": 24},
+    {"id": "openai/gpt-oss-120b", "name": "OpenAI gpt-oss · 120B", "description": "MoE・36層 / 約65GB・初回読み込みに数分かかります", "layers": 36},
 ]
 MAX_CONTEXT = 512
 WINDOW = 48
@@ -136,10 +137,14 @@ def load_model(model_id):
     tokenizer = AutoTokenizer.from_pretrained(model_id, local_files_only=True, trust_remote_code=False)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.bfloat16 if device == "cuda" else torch.float32
+    # Load weights straight onto the target device. gpt-oss keeps its MXFP4
+    # experts only when placed on the GPU at load time; loading on CPU first
+    # dequantizes them to bf16 (about 230GB for 120B) and then needs a second
+    # copy for .to(), which does not fit in DGX Spark's 128GB unified memory.
     model = AutoModelForCausalLM.from_pretrained(
         model_id, torch_dtype="auto" if model_id.startswith("openai/") else dtype, attn_implementation="eager",
-        local_files_only=True, trust_remote_code=False,
-    ).to(device).eval()
+        device_map={"": device}, low_cpu_mem_usage=True, local_files_only=True, trust_remote_code=False,
+    ).eval()
     loaded.update(id=model_id, model=model, tokenizer=tokenizer)
     return model, tokenizer
 

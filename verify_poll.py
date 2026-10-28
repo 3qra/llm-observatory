@@ -1,4 +1,5 @@
 """Verify the browser's short-poll manual generation protocol on the live app."""
+import sys
 import time
 import uuid
 
@@ -9,7 +10,7 @@ session = uuid.uuid4().hex
 print(f"poll test session: {session}", flush=True)
 body = {
     "session_id": session,
-    "model": "openai/gpt-oss-20b",
+    "model": sys.argv[1] if len(sys.argv) > 1 else "openai/gpt-oss-20b",
     "messages": [{"role": "user", "content": "1から10までの数を順に書いてください。"}],
     "temperature": 0,
     "top_k": 0,
@@ -25,7 +26,7 @@ with httpx.Client(timeout=15) as client:
     response.raise_for_status()
     cursor = response.json()["cursor"]
 
-    def next_event(kind, timeout=240):
+    def next_event(kind, timeout=900):  # gpt-oss-120b first load can take minutes
         global cursor
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
