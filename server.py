@@ -97,7 +97,7 @@ class Message(BaseModel):
 
 
 class GenerateRequest(BaseModel):
-    model: str = "Qwen/Qwen3-0.6B"
+    model: str = "openai/gpt-oss-20b"
     messages: list[Message] = Field(min_length=1, max_length=24)
     temperature: float = Field(default=0.7, ge=0, le=2)
     top_k: int = Field(default=20, ge=0, le=100)

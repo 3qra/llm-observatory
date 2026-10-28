@@ -98,7 +98,7 @@ async function init() {
   try {const r=await fetch('/api/models');if(!r.ok)throw new Error('モデル一覧を取得できません。');
     const data=await r.json();state.models=data.models;
     $('modelSelect').replaceChildren(...data.models.map(m=>{const o=el('option','',m.name+(m.available?'':' · 未導入'));o.value=m.id;o.disabled=!m.available;return o;}));
-    const preferred=data.models.find(m=>m.id==='Qwen/Qwen3-8B'&&m.available)||data.models.find(m=>m.available);
+    const preferred=data.models.find(m=>m.id==='openai/gpt-oss-20b'&&m.available)||data.models.find(m=>m.available);
     if(preferred)$('modelSelect').value=preferred.id;else throw new Error('利用可能なモデルがありません。サーバーにモデルを導入してください。');
     modelChange();
   }catch(e){error(e.message);$('sendButton').disabled=true;$('compareButton').disabled=true;status('接続できません');}

@@ -13,7 +13,7 @@ events = queue.Queue()
 failures = []
 body = {
     "session_id": SESSION,
-    "model": "Qwen/Qwen3-0.6B",
+    "model": "openai/gpt-oss-20b",
     "messages": [{"role": "user", "content": "1から10までの数を順に書いてください。"}],
     "temperature": 0,
     "top_k": 0,
