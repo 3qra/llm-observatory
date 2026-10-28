@@ -5,7 +5,7 @@ const randomId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b=
 const params = new URLSearchParams(location.search);
 const sessionId = /^[a-zA-Z0-9_-]{8,64}$/.test(params.get('session') || '') ? params.get('session') : randomId();
 if (params.get('session') !== sessionId) history.replaceState(null,'',`/chat?session=${encodeURIComponent(sessionId)}`);
-const state = {messages:[],busy:false,controller:null,playing:true,models:[]};
+const state = {messages:[],busy:false,controller:null,playing:true,models:[],generatedSteps:0};
 $('sessionLabel').textContent = `SESSION ${sessionId.slice(0,8)}`;
 $('vizFrame').src=`/viz?session=${encodeURIComponent(sessionId)}&embedded=1`;
 const vizLink=el('a','btn btn-sm btn-outline-primary','内部状態の画面を開く ↗');vizLink.href=`/viz?session=${encodeURIComponent(sessionId)}`;vizLink.target='_blank';vizLink.rel='noopener';
@@ -17,7 +17,7 @@ function busy(value) {
   $('sendButton').hidden=value;$('stopButton').hidden=!value;
   $('modelSelect').disabled=value;$('resetButton').disabled=value;$('settingsFields').disabled=value;
   $('modeAuto').disabled=value;$('manualMode').disabled=value;$('compareButton').disabled=value||$('manualMode').checked;$('prompt').disabled=value;
-  $('pauseButton').disabled=!value;$('stepButton').disabled=!value;
+  $('pauseButton').disabled=!value;$('stepButton').disabled=!value;$('backButton').disabled=!value||!$('manualMode').checked||state.generatedSteps===0;
   document.querySelectorAll('.example-button').forEach(b=>b.disabled=value);
 }
 function message(role, value, label) {
@@ -47,7 +47,8 @@ async function streamRun(data, box) {
       const event=JSON.parse(line);
       if(event.type==='status')status(event.message,true);
       if(event.type==='start')status(data.manual_mode&&!state.playing?'次のトークン待ち':'生成しています',state.playing);
-      if(event.type==='token') {last=event.text;box.querySelector('.bubble').textContent=last;$('chatMessages').scrollTop=$('chatMessages').scrollHeight;if(!state.playing)status('次のトークン待ち');}
+      if(event.type==='token') {last=event.text;state.generatedSteps=event.step;box.querySelector('.bubble').textContent=last;$('backButton').disabled=!data.manual_mode||state.generatedSteps===0;$('chatMessages').scrollTop=$('chatMessages').scrollHeight;if(!state.playing)status('次のトークン待ち');}
+      if(event.type==='rewind') {last=event.text;state.generatedSteps=event.step;box.querySelector('.bubble').textContent=last;$('backButton').disabled=state.generatedSteps===0;status('1トークン戻しました');}
       if(event.type==='error')throw new Error(event.message);
       if(event.type==='done') {done=true;status('生成完了');box.append(el('div','message-note',`${event.tokens} tokens · ${event.seconds.toFixed(1)}秒`));}
     }
@@ -64,7 +65,7 @@ async function send(compare=false) {
   const temperature=Number($('temperature').value), temperatureB=Number($('compareTemperature').value);
   const prior=[...state.messages];
   const comparisonId=compare?randomId():null;
-  state.playing=!$('manualMode').checked||compare;
+  state.playing=!$('manualMode').checked||compare;state.generatedSteps=0;
   $('pauseButton').textContent=state.playing?'一時停止':'自動再開';
   error('');message('user',prompt);$('prompt').value='';busy(true);status('モデルを準備しています',true);
   try {
@@ -91,7 +92,7 @@ async function send(compare=false) {
 }
 async function control(action) {
   try {const r=await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:sessionId,action})});if(!r.ok)throw new Error((await r.json()).detail);
-    const result=await r.json();state.playing=result.playing;$('pauseButton').textContent=state.playing?'一時停止':'自動再開';status(action==='step'?'1トークン進めています':state.playing?'生成しています':'次のトークン待ち',state.playing);
+    const result=await r.json();state.playing=result.playing;$('pauseButton').textContent=state.playing?'一時停止':'自動再開';status(action==='step'?'1トークン進めています':action==='back'?'1トークン戻しています':state.playing?'生成しています':'次のトークン待ち',state.playing);
   }catch(e){error(e.message);}
 }
 async function init() {
@@ -110,9 +111,11 @@ $('compareButton').addEventListener('click',()=>send(true));
 $('stopButton').addEventListener('click',()=>state.controller?.abort());
 $('pauseButton').addEventListener('click',()=>control(state.playing?'pause':'resume'));
 $('stepButton').addEventListener('click',()=>control('step'));
+$('backButton').addEventListener('click',()=>control('back'));
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&!e.repeat&&state.busy&&$('manualMode').checked&&!e.target.closest('input,select,textarea,[contenteditable="true"]')){e.preventDefault();control('step');}});
 $('temperature').addEventListener('input',()=>$('temperatureValue').textContent=Number($('temperature').value).toFixed(1));
 $('modelSelect').addEventListener('change',modelChange);
-function modeChange(){const manual=$('manualMode').checked;$('modeHint').textContent=manual?'送信後、最初のトークンからボタンで進めます':'送信すると自動で生成します';$('compareButton').disabled=manual||state.busy;$('compareButton').title=manual?'A/B比較は自動で進める場合に使えます。':'';}
+function modeChange(){const manual=$('manualMode').checked;$('modeHint').textContent=manual?'送信後、Enterかボタンで最初のトークンから進めます':'送信すると自動で生成します';$('compareButton').disabled=manual||state.busy;$('compareButton').title=manual?'A/B比較は自動で進める場合に使えます。':'';}
 $('modeAuto').addEventListener('change',modeChange);
 $('manualMode').addEventListener('change',modeChange);
 $('resetButton').addEventListener('click',()=>{state.messages=[];$('chatMessages').replaceChildren();error('');status('入力待ち');$('prompt').value='';$('prompt').focus();});

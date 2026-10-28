@@ -76,10 +76,18 @@ assert control("step")["playing"] is False
 assert next_event("token")["step"] == 1
 no_token()
 assert control("step")["playing"] is False
-assert next_event("token")["step"] == 2
+second = next_event("token")
+assert second["step"] == 2
+no_token()
+assert control("back")["playing"] is False
+assert next_event("rewind")["step"] == 1
+no_token()
+assert control("step")["playing"] is False
+replayed = next_event("token")
+assert replayed["step"] == 2 and replayed["id"] == second["id"]
 no_token()
 assert control("resume")["playing"] is True
 assert next_event("done")["reason"] in ("length", "eos")
 thread.join(timeout=10)
 assert not failures, failures
-print("manual start / one token per step / resume: OK")
+print("manual start / one token per step / rewind and replay / resume: OK")

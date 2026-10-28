@@ -220,6 +220,13 @@ function handleBroadcast(event) {
   const run = runs.get(key);
   if (!run) return;
   if (event.type === 'pca') { run.pca = event; if (lane === key && embedded) renderPca(); }
+  if (event.type === 'rewind') {
+    run.steps.length=event.step;
+    run.done=null;
+    if(lane===key){renderLane();status(event.step?'1トークン戻しました':'最初のトークン待ち');broadcastSelection(event.step?'live':0);}
+    updateLaneButtons();
+    return;
+  }
   if (event.type === 'token') {
     run.steps.push(event);
     if (lane === key) {

@@ -67,28 +67,36 @@ class RunControl:
         self.condition = threading.Condition()
         self.playing = playing
         self.budget = 0
+        self.rewinds = 0
 
     def change(self, action):
         with self.condition:
             if action == "pause":
                 self.playing = False
             elif action == "resume":
-                self.playing, self.budget = True, 0
+                self.playing, self.budget, self.rewinds = True, 0, 0
             elif action == "step":
                 self.playing = False
                 self.budget += 1
+            elif action == "back":
+                self.playing = False
+                self.budget = 0
+                self.rewinds += 1
             self.condition.notify_all()
-            return {"type": "control", "playing": self.playing, "step_budget": self.budget}
+            return {"type": "control", "playing": self.playing, "step_budget": self.budget, "rewind_budget": self.rewinds}
 
     def wait(self, stop):
         with self.condition:
-            while not self.playing and not self.budget and not stop.is_set():
+            while not self.playing and not self.budget and not self.rewinds and not stop.is_set():
                 self.condition.wait(timeout=0.2)
             if stop.is_set():
-                return False
+                return None
+            if self.rewinds:
+                self.rewinds -= 1
+                return "back"
             if not self.playing:
                 self.budget -= 1
-            return True
+            return "forward"
 
 
 class Message(BaseModel):
@@ -102,7 +110,7 @@ class GenerateRequest(BaseModel):
     temperature: float = Field(default=0.7, ge=0, le=2)
     top_k: int = Field(default=20, ge=0, le=100)
     top_p: float = Field(default=0.95, ge=0.05, le=1)
-    max_tokens: int = Field(default=128, ge=1, le=256)
+    max_tokens: int = Field(default=384, ge=1, le=768)
     seed: int = Field(default=42, ge=0, le=2147483647)
     delay_ms: int = Field(default=80, ge=0, le=1000)
     manual_mode: bool = False
@@ -237,6 +245,7 @@ def infer(data, events, stop, control, session, run_id):
         rng = torch.Generator(device=model.device).manual_seed(data.seed)
         cache = None
         generated = []
+        rng_states = []
         elapsed_compute = 0
         start = time.perf_counter()
         eos_ids = model.generation_config.eos_token_id
@@ -247,9 +256,21 @@ def infer(data, events, stop, control, session, run_id):
                             for token in ("<|end|>", "<|return|>", "<|call|>")]))
         reason = "length"
         with torch.inference_mode():
-            for step in range(data.max_tokens):
-                if not control.wait(stop):
+            while len(generated) < data.max_tokens:
+                action = control.wait(stop)
+                if action is None:
                     return
+                if action == "back":
+                    if generated:
+                        generated.pop()
+                        context_ids.pop()
+                        rng.set_state(rng_states.pop())
+                        cache = None
+                        ids = torch.tensor([context_ids], device=model.device)
+                    text = tokenizer.decode(generated, skip_special_tokens=True, clean_up_tokenization_spaces=False).rstrip("\ufffd")
+                    emit({"type": "rewind", "step": len(generated), "text": text})
+                    continue
+                step = len(generated)
                 tick = time.perf_counter()
                 outputs = model(input_ids=ids, past_key_values=cache, use_cache=True,
                                 output_attentions=True, output_hidden_states=True, return_dict=True)
@@ -273,10 +294,12 @@ def infer(data, events, stop, control, session, run_id):
                 cache = outputs.past_key_values
                 logits = outputs.logits[0, -1].float()
                 probs = sampling_distribution(logits.clone(), data.temperature, data.top_k, data.top_p)
+                rng_state = rng.get_state()
                 next_id = int(torch.multinomial(probs, 1, generator=rng).item())
                 if next_id in eos_ids:
                     reason = "eos"
                     break
+                rng_states.append(rng_state)
                 best_probs, best_ids = torch.topk(probs, 8)
                 candidates = [{"id": int(i), "text": token_label(tokenizer, i),
                                "prob": float(p), "logit": float(logits[i])}
@@ -403,7 +426,7 @@ async def session_events(session_id: str, request: Request):
 
 class ControlRequest(BaseModel):
     session_id: str
-    action: str = Field(pattern="^(pause|resume|step)$")
+    action: str = Field(pattern="^(pause|resume|step|back)$")
 
 
 @app.post("/api/control")
