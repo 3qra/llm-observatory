@@ -42,3 +42,18 @@
 .fit-viz.embedded-viz .bottom-grid{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr) minmax(145px,.65fr)}
 .fit-viz.embedded-viz .side-stack{grid-column:auto;display:flex}
 .fit-viz.embedded-viz .middle-grid{grid-template-columns:minmax(0,.9fr) minmax(0,1.45fr)}
+
+/* Split the instruments between the two exhibition displays. */
+.overview-viz .viz-controls,.overview-viz .middle-grid,.overview-viz .bottom-grid>.logits-panel,.overview-viz .bottom-grid>.side-stack,.overview-viz .timeline,.overview-viz .compare-panel{display:none!important}
+.overview-viz .bottom-grid{display:block}.overview-viz .probability-panel{height:100%}
+.detail-viz .top-grid,.detail-viz .pca-panel,.detail-viz .bottom-grid>.probability-panel{display:none!important}
+.detail-viz .bottom-grid{grid-template-columns:minmax(0,1.5fr) minmax(210px,.8fr)}
+.detail-viz .side-stack{grid-column:auto;display:flex}
+.fit-viz.overview-viz .dashboard{grid-template-rows:38px 28px minmax(135px,1fr) minmax(175px,1.2fr) minmax(210px,1.5fr)}
+.fit-viz.overview-viz .pca-layout{height:calc(100% - 60px);grid-template-columns:minmax(0,3fr) minmax(140px,1fr)}
+.fit-viz.overview-viz .probability-chart{height:calc(100% - 59px)}
+.fit-viz.detail-viz .dashboard{grid-template-rows:38px 28px 28px minmax(240px,1.6fr) minmax(200px,1.2fr) 38px}
+.fit-viz.detail-viz .middle-grid{grid-template-columns:minmax(0,.9fr) minmax(0,1.45fr)}
+.fit-viz.detail-viz .bottom-grid{grid-template-columns:minmax(0,1.5fr) minmax(210px,.8fr)}
+.fit-viz.detail-viz .side-stack{grid-column:auto;display:flex}
+@media(max-width:700px){.detail-viz .bottom-grid{grid-template-columns:1fr}.detail-viz .side-stack{grid-column:auto}}

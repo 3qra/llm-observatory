@@ -1,6 +1,8 @@
 'use strict';
 const embedded = new URLSearchParams(location.search).get('embedded')==='1';
-if(embedded)document.body.classList.add('embedded-viz');
+document.body.classList.add(embedded?'embedded-viz':'detail-viz');
+if(embedded)document.body.classList.add('overview-viz');
+document.querySelector('.dashboard-heading h2').textContent=embedded?'入力から次のトークンまで':'モデル内部の動き';
 function fitViewport(){
   const width=embedded?window.parent.innerWidth:window.innerWidth;
   document.body.classList.toggle('fit-viz',width>=1241&&window.innerHeight>=(embedded?760:820));
@@ -101,17 +103,20 @@ function renderAttention(s) {
   wrap.scrollLeft=atEnd ? wrap.scrollWidth : oldScroll;
 }
 function renderProbabilities(s) {
-  const fragment=document.createDocumentFragment();
-  const rows=[...s.candidates,{text:'その他',prob:s.other_prob,other:true}];
-  rows.forEach(c=>{const row=el('div',`candidate-row${c.id===s.id?' selected':''}${c.other?' other-row':''}`);
-    const label=el('span','candidate-text',visible(c.text));label.title=c.id===undefined?c.text:`${c.text} / Token ID ${c.id}`;
-    const track=el('div','prob-track'),bar=el('div','prob-bar');bar.style.width=`${c.prob*100}%`;track.append(bar);
-    row.append(label,track,el('span','prob-number',percent(c.prob)));fragment.append(row);
-  }); $('probabilityChart').replaceChildren(fragment);
-  const table=document.createDocumentFragment(), heading=el('div','logit-head');
-  heading.append(el('span','','候補'),el('span','','Logit'),el('span','','確率'));table.append(heading);
-  s.candidates.slice(0,5).forEach(c=>{const row=el('div','logit-row');row.append(el('span','',visible(c.text)),el('span','',c.logit.toFixed(2)),el('span','',percent(c.prob)));table.append(row);});
-  $('logitsTable').replaceChildren(table);
+  if(embedded){
+    const fragment=document.createDocumentFragment();
+    const rows=[...s.candidates,{text:'その他',prob:s.other_prob,other:true}];
+    rows.forEach(c=>{const row=el('div',`candidate-row${c.id===s.id?' selected':''}${c.other?' other-row':''}`);
+      const label=el('span','candidate-text',visible(c.text));label.title=c.id===undefined?c.text:`${c.text} / Token ID ${c.id}`;
+      const track=el('div','prob-track'),bar=el('div','prob-bar');bar.style.width=`${c.prob*100}%`;track.append(bar);
+      row.append(label,track,el('span','prob-number',percent(c.prob)));fragment.append(row);
+    }); $('probabilityChart').replaceChildren(fragment);
+  } else {
+    const table=document.createDocumentFragment(), heading=el('div','logit-head');
+    heading.append(el('span','','候補'),el('span','','Logit'),el('span','','確率'));table.append(heading);
+    s.candidates.slice(0,5).forEach(c=>{const row=el('div','logit-row');row.append(el('span','',visible(c.text)),el('span','',c.logit.toFixed(2)),el('span','',percent(c.prob)));table.append(row);});
+    $('logitsTable').replaceChildren(table);
+  }
 }
 function showStep(index) {
   if(!state.steps.length)return;
@@ -127,12 +132,20 @@ function showStep(index) {
   $('timelineCount').textContent=`${state.selected+1} / ${state.steps.length}`;
   $('prevStep').disabled=state.selected===0; $('nextStep').disabled=state.selected===state.steps.length-1;
   $('liveButton').disabled=false; $('liveButton').textContent=state.follow&&state.busy?'追従中':'最新へ';
-  renderHidden(s);renderAttention(s);renderProbabilities(s);
+  if(!embedded){renderHidden(s);renderAttention(s);}
+  renderProbabilities(s);
 }
 
 const sessionId = new URLSearchParams(location.search).get('session');
+const selectionChannel = sessionId && 'BroadcastChannel' in window ? new BroadcastChannel(`llm-observatory-selection-${sessionId}`) : null;
 const runs = new Map();
 let lane = 'single', selectedPca = 0, playing = true;
+if(selectionChannel)selectionChannel.onmessage = ({data}) => {
+  if(data?.lane && runs.has(data.lane) && lane!==data.lane){lane=data.lane;renderLane();}
+  if(data?.step==='live'){state.follow=true;if(state.steps.length)showStep(state.steps.length-1);}
+  else if(Number.isInteger(data?.step) && state.steps.length){state.follow=false;showStep(data.step);}
+};
+function broadcastSelection(step){selectionChannel?.postMessage({lane,step});}
 function setupSession() {
   if (!sessionId || !/^[a-zA-Z0-9_-]{8,64}$/.test(sessionId)) {
     error('画面の選択ページから、同じセッションのチャット画面と可視化画面を開いてください。');
@@ -153,7 +166,7 @@ function renderLane() {
   state.steps = run.steps;
   state.busy = !run.done;
   if (run.steps.length) showStep(run.steps.length - 1);
-  if (run.pca) renderPca();
+  if (run.pca && embedded) renderPca();
   renderCompare();
   if (run.done) status(run.done.reason === 'length' ? '上限まで生成しました' : '生成完了');
   $('laneA').classList.toggle('active', lane === 'A');
@@ -205,7 +218,7 @@ function handleBroadcast(event) {
   }
   const run = runs.get(key);
   if (!run) return;
-  if (event.type === 'pca') { run.pca = event; if (lane === key) renderPca(); }
+  if (event.type === 'pca') { run.pca = event; if (lane === key && embedded) renderPca(); }
   if (event.type === 'token') {
     run.steps.push(event);
     if (lane === key) {
@@ -241,12 +254,12 @@ function renderPca() {
 }
 function pickPca(index) { selectedPca=index; renderPca(); }
 $('inputTokens').addEventListener('click',e=>{const chip=e.target.closest('.token-chip');if(chip)pickPca([...$('inputTokens').children].indexOf(chip));});
-for(const name of ['A','B']) $(name==='A'?'laneA':'laneB').addEventListener('click',()=>{if(runs.has(name)){lane=name;renderLane();}});
+for(const name of ['A','B']) $(name==='A'?'laneA':'laneB').addEventListener('click',()=>{if(runs.has(name)){lane=name;renderLane();broadcastSelection(state.follow?'live':state.selected);}});
 $('layerSelect').addEventListener('change',()=>{const s=state.steps[state.selected];if(s){renderAttention(s);renderHidden(s);}});
-$('timeline').addEventListener('input',()=>{state.follow=false;showStep(Number($('timeline').value)-1);});
-$('prevStep').addEventListener('click',()=>{state.follow=false;showStep(state.selected-1);});
-$('nextStep').addEventListener('click',()=>{state.follow=false;showStep(state.selected+1);});
-$('liveButton').addEventListener('click',()=>{state.follow=true;showStep(state.steps.length-1);});
+$('timeline').addEventListener('input',()=>{state.follow=false;showStep(Number($('timeline').value)-1);broadcastSelection(state.selected);});
+$('prevStep').addEventListener('click',()=>{state.follow=false;showStep(state.selected-1);broadcastSelection(state.selected);});
+$('nextStep').addEventListener('click',()=>{state.follow=false;showStep(state.selected+1);broadcastSelection(state.selected);});
+$('liveButton').addEventListener('click',()=>{state.follow=true;showStep(state.steps.length-1);broadcastSelection('live');});
 async function controlAction(action) {
   try { const r=await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:sessionId,action})});if(!r.ok)throw new Error((await r.json()).detail); }
   catch(e){error(e.message);}
