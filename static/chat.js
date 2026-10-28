@@ -16,7 +16,7 @@ function busy(value) {
   state.busy=value;
   $('sendButton').hidden=value;$('stopButton').hidden=!value;
   $('modelSelect').disabled=value;$('resetButton').disabled=value;$('settingsFields').disabled=value;
-  $('manualMode').disabled=value;$('compareButton').disabled=value||$('manualMode').checked;$('prompt').disabled=value;
+  $('modeAuto').disabled=value;$('manualMode').disabled=value;$('compareButton').disabled=value||$('manualMode').checked;$('prompt').disabled=value;
   $('pauseButton').disabled=!value;$('stepButton').disabled=!value;
   document.querySelectorAll('.example-button').forEach(b=>b.disabled=value);
 }
@@ -112,7 +112,9 @@ $('pauseButton').addEventListener('click',()=>control(state.playing?'pause':'res
 $('stepButton').addEventListener('click',()=>control('step'));
 $('temperature').addEventListener('input',()=>$('temperatureValue').textContent=Number($('temperature').value).toFixed(1));
 $('modelSelect').addEventListener('change',modelChange);
-$('manualMode').addEventListener('change',() => {$('compareButton').disabled=$('manualMode').checked;$('compareButton').title=$('manualMode').checked?'A/B比較は手動モードを解除すると使えます。':'';});
-$('resetButton').addEventListener('click',()=>{state.messages=[];$('chatMessages').replaceChildren(el('div','chart-empty','新しい会話を始めましょう。'));error('');status('入力待ち');$('prompt').value='';$('prompt').focus();});
+function modeChange(){const manual=$('manualMode').checked;$('modeHint').textContent=manual?'送信後、最初のトークンからボタンで進めます':'送信すると自動で生成します';$('compareButton').disabled=manual||state.busy;$('compareButton').title=manual?'A/B比較は自動で進める場合に使えます。':'';}
+$('modeAuto').addEventListener('change',modeChange);
+$('manualMode').addEventListener('change',modeChange);
+$('resetButton').addEventListener('click',()=>{state.messages=[];$('chatMessages').replaceChildren();error('');status('入力待ち');$('prompt').value='';$('prompt').focus();});
 document.querySelectorAll('.example-button').forEach(b=>b.addEventListener('click',()=>{$('prompt').value=b.dataset.prompt;send(false);}));
 init();
