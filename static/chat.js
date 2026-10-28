@@ -7,6 +7,7 @@ const sessionId = /^[a-zA-Z0-9_-]{8,64}$/.test(params.get('session') || '') ? pa
 if (params.get('session') !== sessionId) history.replaceState(null,'',`/chat?session=${encodeURIComponent(sessionId)}`);
 const state = {messages:[],busy:false,controller:null,playing:true,models:[]};
 $('sessionLabel').textContent = `SESSION ${sessionId.slice(0,8)}`;
+$('vizFrame').src=`/viz?session=${encodeURIComponent(sessionId)}&embedded=1`;
 const vizLink=el('a','btn btn-sm btn-outline-primary','可視化画面を開く ↗');vizLink.href=`/viz?session=${encodeURIComponent(sessionId)}`;vizLink.target='_blank';vizLink.rel='noopener';
 $('modelDescription').after(vizLink);
 function status(value, active=false) {$('runStatus').textContent=value;$('runStatus').classList.toggle('active',active);}

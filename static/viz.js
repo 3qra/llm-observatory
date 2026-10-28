@@ -1,4 +1,13 @@
 'use strict';
+const embedded = new URLSearchParams(location.search).get('embedded')==='1';
+if(embedded)document.body.classList.add('embedded-viz');
+function fitViewport(){
+  const width=embedded?window.parent.innerWidth:window.innerWidth;
+  document.body.classList.toggle('fit-viz',width>=1241&&window.innerHeight>=(embedded?760:820));
+}
+window.addEventListener('resize',fitViewport);
+if(embedded)window.parent.addEventListener('resize',fitViewport);
+fitViewport();
 const $ = id => document.getElementById(id);
 const state = {models: [], messages: [], steps: [], selected: -1, follow: true, busy: false, controller: null, layers: 0, assistant: null};
 const el = (tag, cls, text) => { const n = document.createElement(tag); if(cls) n.className = cls; if(text !== undefined) n.textContent = text; return n; };

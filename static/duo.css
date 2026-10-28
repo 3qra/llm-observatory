@@ -2,3 +2,43 @@
 @media(max-width:900px){.viz-view .bottom-grid{grid-template-columns:1fr 1fr}.viz-view .side-stack{grid-column:1/-1;display:block}.viz-view .side-stack .system-panel{height:auto}.viz-view .middle-grid{grid-template-columns:1fr}.viz-view .top-grid{grid-template-columns:1fr 1fr}.duo-main{padding:12px}.pca-layout{grid-template-columns:1fr}.pca-details{padding-bottom:10px}.launch-cards{grid-template-columns:1fr}}
 @media(max-width:580px){.duo-page .topbar{padding:0 12px}.session-label{display:none}.viz-view .top-grid,.viz-view .bottom-grid{grid-template-columns:1fr}.chat-view .chat-panel{height:calc(100dvh - 95px);min-height:600px}.compare-head>span{margin-left:0;width:100%}.launch-card{min-height:200px}}
 .compare-panel{margin-bottom:14px}.compare-results{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:0 15px 15px}.compare-run{background:#f8faff;border:1px solid var(--line);border-radius:7px;padding:12px;min-width:0}.compare-run strong{font-size:12px}.compare-answer{font-size:11px;line-height:1.65;white-space:pre-wrap;min-height:45px;max-height:70px;overflow:auto;margin:7px 0}.compare-candidate{display:grid;grid-template-columns:minmax(0,1fr) 48px;gap:5px;position:relative;padding:5px 4px;font:10px Consolas,monospace}.compare-candidate span{z-index:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.compare-candidate span:nth-child(2){text-align:right}.compare-candidate i{position:absolute;inset:1px auto 1px 0;background:#dce6ff;border-radius:2px;max-width:100%}@media(max-width:580px){.compare-results{grid-template-columns:1fr}}
+
+/* The conversation is the control surface; its live instruments sit beside it. */
+.chat-view .duo-main{max-width:1920px;min-height:calc(100dvh - 70px);display:grid;grid-template-columns:minmax(340px,.82fr) minmax(0,1.55fr);gap:16px;align-items:stretch}
+.chat-view .chat-panel{height:calc(100dvh - 102px);min-height:580px;max-height:none;min-width:0}
+.chat-view .model-control{display:block}.chat-view .model-control>a{display:inline-flex;width:auto;white-space:nowrap}
+.chat-view .inline-viz{min-width:0;height:calc(100dvh - 102px);min-height:580px;border:1px solid var(--line);border-radius:10px;background:#f8faff;overflow:hidden}
+.chat-view .inline-viz iframe{display:block;width:100%;height:100%;border:0;background:var(--paper)}
+.embedded-viz{background:#f8faff}.embedded-viz .topbar{display:none}.embedded-viz .duo-main{max-width:none;padding:16px}.embedded-viz .dashboard-heading{margin-top:0}
+@media(max-width:1240px){.chat-view .duo-main{grid-template-columns:1fr;min-height:0}.chat-view .chat-panel{height:65dvh;min-height:550px}.chat-view .inline-viz{height:850px;min-height:0}}
+@media(max-width:580px){.chat-view .chat-panel{height:70dvh;min-height:600px}.chat-view .inline-viz{height:760px}.embedded-viz .duo-main{padding:12px}}
+
+/* At presentation size, all instruments remain in the viewport. Conversation
+   history and dense charts retain their own scroll areas. */
+@media(min-width:1241px) and (min-height:820px){
+  .chat-view{height:100dvh;overflow:hidden}
+  .chat-view .duo-main{height:calc(100dvh - 70px);min-height:0;overflow:hidden}
+  .chat-view .chat-panel,.chat-view .inline-viz{height:100%;min-height:0}
+}
+.fit-viz{height:100dvh;overflow:hidden}
+.fit-viz .duo-main{height:calc(100dvh - 70px);padding:12px 16px;overflow:hidden}
+.fit-viz.embedded-viz .duo-main{height:100dvh;padding:10px}
+.fit-viz .dashboard{height:100%;min-height:0;display:grid;position:relative;gap:7px;grid-template-rows:38px 28px 28px minmax(90px,.85fr) minmax(105px,1.05fr) minmax(165px,1.5fr) minmax(160px,1.5fr) 38px}
+.fit-viz .dashboard-heading,.fit-viz .viz-controls,.fit-viz .compare-head,.fit-viz .top-grid,.fit-viz .pca-panel,.fit-viz .middle-grid,.fit-viz .bottom-grid,.fit-viz .timeline{margin:0;min-height:0}
+.fit-viz .dashboard-footer{display:none}
+.fit-viz .panel-heading{padding:7px 10px 4px;min-height:29px}
+.fit-viz .panel-foot{padding:3px 10px 5px}
+.fit-viz .token-list{min-height:0;max-height:55px;padding:2px 10px;overflow-y:auto}
+.fit-viz .current-token{font-size:22px;min-height:33px;margin-bottom:3px}
+.fit-viz .current-details{padding-bottom:4px}
+.fit-viz .pca-layout{height:calc(100% - 60px);padding:0 10px;gap:9px}
+.fit-viz .pca-layout svg{height:100%;min-height:48px}
+.fit-viz .hidden-chart,.fit-viz .attention-wrap{height:calc(100% - 75px);min-height:80px;padding:0 10px;overflow:auto}
+.fit-viz .probability-chart{height:calc(100% - 58px);min-height:0;overflow:auto;padding:0 10px}
+.fit-viz .logits-table{height:calc(100% - 82px);min-height:0;overflow:auto;padding:0 10px}
+.fit-viz .timeline{padding:4px 10px}
+.fit-viz .compare-panel:not([hidden]){position:absolute;z-index:3;right:0;bottom:46px;width:min(100%,680px);max-height:240px;overflow:auto;box-shadow:0 12px 32px #192c4726}
+.fit-viz #errorBox:not([hidden]){position:absolute;z-index:4;left:0;right:0;bottom:46px;margin:0}
+.fit-viz.embedded-viz .bottom-grid{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr) minmax(145px,.65fr)}
+.fit-viz.embedded-viz .side-stack{grid-column:auto;display:flex}
+.fit-viz.embedded-viz .middle-grid{grid-template-columns:minmax(0,.9fr) minmax(0,1.45fr)}
